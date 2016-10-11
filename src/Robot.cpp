@@ -20,7 +20,7 @@ class Robot: public IterativeRobot  // FRC9538 Shadow 2016
 	Solenoid *ClampSolenoid  = new Solenoid(3);
 	Solenoid *FlipoSolenoid  = new Solenoid(4);
 	Timer FwdTime, LoopTime, AutoDelayTime,UnclampDelay,FlyWheelDelay;
-	bool CatDown, CatActive, ArmExtend, FlyWheelShoot, FlyWheelReady, FlyEnaged;
+	bool CatDown, CatActive, ArmExtend, FlyWheelShoot, FlyWheelReady, FlyEngaged;
 	bool AutoLow, AutoHi,AutoLowLong, AutoCatDown, AutoFireLatch, AutoReLatch, AutoDelayChk, AutoDelayCmp ;
 	bool CompleteOuter, CompleteCourtYard, CYstep1, CYstep2, CYstep3, COstep1, COstep2, COstep3;
 	float AutoMode;
@@ -99,7 +99,7 @@ public:
 		OutputX(0), OutputY(0),
 		AutoOn(0), LedOn(3),			// Set Relay channel 0 for Auto Status
 										// Relay channel 3 for LED on
-		CatDown(false), CatActive(true),ArmExtend(false),FlyWheelShoot(false),FlyWheelReady(false),FlyEnaged(false),
+		CatDown(false), CatActive(true),ArmExtend(false),FlyWheelShoot(false),FlyWheelReady(false),FlyEngaged(false),
 		AutoLow(false),AutoHi(false),AutoLowLong(false),AutoCatDown(false),AutoFireLatch(false),
 		AutoDelayChk(false),AutoDelayCmp(false),
 		CompleteOuter(false), CompleteCourtYard(false),CYstep1(false),CYstep2(false),CYstep3(false),
@@ -674,7 +674,7 @@ private:
 		FlyWheelDelay.Reset();
 		FlyWheelShoot=false;
 		FlyWheelReady=false;
-		FlyEnaged=false;
+		FlyEngaged=false;
 		Flywheel1.Set(0.0);
 		Flywheel2.Set(0.0);
 
@@ -831,59 +831,78 @@ private:
 			FlyWheelShoot=true;}
 
 		// A button and unclamped and Unclamp >0,25 sec, then engage Flywheel to shoot
-		else if (FlyWheelShoot and !FlyEnaged and UnclampDelay.Get() > 0.250 ){
+		else if (FlyWheelShoot and !FlyEngaged and UnclampDelay.Get() > 0.250 ){
 			FlyArm->Set(true);
 			FlyWheelDelay.Stop();
 			FlyWheelDelay.Reset();
 			FlyWheelDelay.Start();
-			FlyEnaged=true;}
+			FlyEngaged=true;}
 
 		//1sec after Fly Wheel shoots, retract and turn off Fly Wheel
-		else if (FlyEnaged and FlyWheelDelay.Get()> 1.0){
+		else if (FlyEngaged and FlyWheelDelay.Get()> 1.0){
 			FlyArm->Set(false);
 			Flywheel1.Set(0.0);
 			Flywheel2.Set(0.0);
 			FlyWheelDelay.Stop();
 			FlyWheelShoot=false;
 			FlyWheelReady=false;
-			FlyEnaged=false;}
+			FlyEngaged=false;}
 
 		//
-		// code for  intake
 		//
-		if (RmTrig > 0.2 and !FlyWheelShoot){					// Ball floor to intake
+		// code for intake
+		//
+		//
+		//	Arm control
+		//
+		if (RmTrig > 0.2 and !FlyWheelShoot){					// Ball floor to intake (intake down)
 			Arm1Solenoid->Set(true);	//extend Arm
 			Arm2Solenoid->Set(true);
-			Intake.Set(1.0);}
-		else if (LmTrig > 0.2 and !FlyWheelShoot ){			// Ball intake to floor
-			Arm1Solenoid->Set(true);	//extend Arm
-			Arm2Solenoid->Set(true);
-			Intake.Set(-1.0);}
-		else if (RMbumper and FlyWheelReady){	// Ball intake to cradle and FlyReady, then turn off
-			Flywheel1.Set(0.0);
-			Flywheel2.Set(0.0);
-			FlyWheelReady=false;}
-		else if (RMbumper and !FlyWheelShoot and !FlyWheelReady){			// Ball intake to cradle
-			Arm1Solenoid->Set(false);	// Retract Arm
+			}
+		else{
+			Arm1Solenoid->Set(false);
 			Arm2Solenoid->Set(false);
+			}
+
+		//
+		//	Roller/FlyWheel control
+		//
+		if (RMbumper and LmTrig > 0.2 and FlyWheelReady ){		// prep for intake to cradle
+			Flywheel1.Set(0.0);									// Turn off flywheel motors
+			Flywheel2.Set(0.0);
+			FlyWheelReady=false;
+			Intake.Set(1.0);}
+		else if (RMbumper and LmTrig > 0.2  and !FlyWheelShoot and !FlyWheelReady ){		// intake to cradle
 			ClampSolenoid->Set(false);	// unclamp
 			Intake.Set(0.3);
 			Flywheel1.Set(-0.30);
 			Flywheel2.Set(-0.30);
+			FlyArm->Set(true);
 			}
-		else if (LMbumper and !FlyWheelShoot){			// Ball cradle to intake
-			Arm1Solenoid->Set(false);	// Retract Arm
-			Arm2Solenoid->Set(false);
-			ClampSolenoid->Set(false);	// unclamp
+		else if (RMbumper and LMbumper){			// cradle to intake
+			ClampSolenoid->Set(false);				// unclamp
 			Intake.Set(-0.3);
 			Flywheel1.Set(0.30);
 			Flywheel2.Set(0.30);
-			ArmExtend=false;}
-		else{
+			FlyArm->Set(true);
+			}
+		else if (LmTrig > 0.2 ){	//roller on to intake from floor
+			Intake.Set(1.0);}
+		else if (LMbumper){			// roller on to push to floor
+			Intake.Set(-1.0);		// intake to floor
+			}
+		else if (!Abutton and !FlyWheelPrep) {
+			Flywheel1.Set(0.0);
+			Flywheel2.Set(0.0);
+			FlyArm->Set(false);
 			Intake.Set(0.0);
-			Arm1Solenoid->Set(false);
-			Arm2Solenoid->Set(false);
-			ArmExtend=false;}
+			}
+		else {
+			Intake.Set(0.0);
+			}
+
+
+
 
 		if (MPov == 0)
 			FlipoSolenoid->Set(true);	// Set Flipo for Long Shot
